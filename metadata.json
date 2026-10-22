@@ -1,0 +1,6 @@
+{
+  "name": "LuxDrive AI Studio",
+  "description": "Studio professionale di consulenza strategica, produzione video e analytics per canale YouTube automotive di lusso.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
