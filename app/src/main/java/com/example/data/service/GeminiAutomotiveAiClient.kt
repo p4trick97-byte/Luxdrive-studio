@@ -87,13 +87,28 @@ class GeminiAutomotiveAiClient(private val context: Context) {
             Log.e(TAG, "Errore durante la generazione Firebase AI Logic", e)
             val rawMsg = e.message.orEmpty()
             val friendlyMsg = when {
-                rawMsg.contains("403") || rawMsg.contains("AppCheck") || rawMsg.contains("app-check") ->
-                    "Errore di attestazione App Check (HTTP 403). Assicurati che il debug secret sia registrato nei token di debug della console Firebase e che le regole App Check non blocchino le richieste in fase di sviluppo."
-                rawMsg.contains("404") || rawMsg.contains("not found") ->
+                rawMsg.contains("Firebase App Check token is invalid", ignoreCase = true) ||
+                rawMsg.contains("App Check", ignoreCase = true) ||
+                rawMsg.contains("AppCheck", ignoreCase = true) ||
+                rawMsg.contains("app-check", ignoreCase = true) ||
+                rawMsg.contains("403") ||
+                rawMsg.contains("PERMISSION_DENIED", ignoreCase = true) -> {
+                    val debugSecret = AppCheckHelper.getOrCreateDebugSecret(context)
+                    "Attestazione Firebase App Check rifiutata dal server: il debug token del dispositivo non è ancora autorizzato.\n\n" +
+                    "Debug Secret del tuo dispositivo:\n$debugSecret\n\n" +
+                    "Passaggi per autorizzarlo direttamente dal tuo Samsung Galaxy S23:\n" +
+                    "1. Copia il Debug Secret mostrato sopra (puoi farlo anche dalla sezione Impostazioni dell'app).\n" +
+                    "2. Apri Chrome su console.firebase.google.com e seleziona il progetto 'luxdrive-ai-studio'.\n" +
+                    "3. Vai nel menu -> App Check -> scheda 'App'.\n" +
+                    "4. Clicca sui 3 puntini a destra di 'com.aistudio.luxdrive.zqkpmx' e seleziona 'Gestisci token di debug'.\n" +
+                    "5. Clicca 'Aggiungi token di debug', assegna un nome (es. Galaxy S23) e incolla questo secret.\n" +
+                    "6. Torna qui e tocca 'Genera con AI'."
+                }
+                rawMsg.contains("404") || rawMsg.contains("not found", ignoreCase = true) ->
                     "Modello Gemini non trovato o Firebase AI Logic non ancora abilitato nel progetto Firebase."
-                rawMsg.contains("RESOURCE_EXHAUSTED") || rawMsg.contains("429") ->
+                rawMsg.contains("RESOURCE_EXHAUSTED", ignoreCase = true) || rawMsg.contains("429") ->
                     "Quota delle richieste Gemini Developer API superata. Attendi qualche istante e riprova."
-                rawMsg.contains("Unable to resolve host") || rawMsg.contains("ConnectException") ->
+                rawMsg.contains("Unable to resolve host", ignoreCase = true) || rawMsg.contains("ConnectException", ignoreCase = true) ->
                     "Errore di connessione di rete: impossibile raggiungere i server Firebase. Controlla la connessione internet."
                 else ->
                     e.localizedMessage ?: "Errore durante la generazione dello script con Firebase AI Logic."

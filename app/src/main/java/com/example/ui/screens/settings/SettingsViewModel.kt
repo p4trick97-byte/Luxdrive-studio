@@ -1,11 +1,15 @@
 package com.example.ui.screens.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.repository.AnalyticsRepository
 import com.example.data.repository.IntegrationBridgeManager
 import com.example.data.repository.VideoProjectRepository
 import com.example.data.repository.YouTubeApiConfig
+import com.example.util.AppCheckDiagnostics
+import com.example.util.AppCheckHelper
+import com.example.util.AppCheckTokenState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,7 +23,10 @@ data class SettingsUiState(
     val youtubeConfig: YouTubeApiConfig = YouTubeApiConfig(),
     val isSyncing: Boolean = false,
     val syncIntervalHours: Int = 12,
-    val feedbackMessage: String? = null
+    val feedbackMessage: String? = null,
+    // App Check diagnostics
+    val appCheckDiagnostics: AppCheckDiagnostics? = null,
+    val isVerifyingAppCheck: Boolean = false
 )
 
 class SettingsViewModel(
@@ -42,6 +49,61 @@ class SettingsViewModel(
             integrationBridge.isSyncing.collect { syncing ->
                 _uiState.value = _uiState.value.copy(isSyncing = syncing)
             }
+        }
+    }
+
+    fun initAppCheckStatus(context: Context) {
+        if (_uiState.value.appCheckDiagnostics != null) return
+        val configured = AppCheckHelper.isFirebaseConfigured(context)
+        val debugSecret = AppCheckHelper.getOrCreateDebugSecret(context)
+        _uiState.value = _uiState.value.copy(
+            appCheckDiagnostics = AppCheckDiagnostics(
+                isFirebaseConfigured = configured,
+                firebaseProjectId = "luxdrive-ai-studio",
+                isDebugMode = com.example.BuildConfig.DEBUG,
+                activeProviderName = if (com.example.BuildConfig.DEBUG) "DebugAppCheckProviderFactory" else "PlayIntegrityAppCheckProviderFactory",
+                debugSecret = debugSecret,
+                tokenState = AppCheckTokenState.NotChecked
+            )
+        )
+    }
+
+    fun verifyAppCheck(context: Context, forceRefresh: Boolean = true) {
+        if (_uiState.value.isVerifyingAppCheck) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isVerifyingAppCheck = true)
+            val diag = AppCheckHelper.verifyAppCheckToken(context, forceRefresh)
+            val msg = when (diag.tokenState) {
+                is AppCheckTokenState.TokenValid -> "Attestazione App Check verificata con successo dal server Firebase!"
+                is AppCheckTokenState.TokenRejectedByServer -> "Attestazione rifiutata: registra il Debug Secret nella console Firebase."
+                is AppCheckTokenState.TokenError -> "Errore App Check: ${(diag.tokenState as AppCheckTokenState.TokenError).error}"
+                else -> null
+            }
+            _uiState.value = _uiState.value.copy(
+                isVerifyingAppCheck = false,
+                appCheckDiagnostics = diag,
+                feedbackMessage = msg
+            )
+        }
+    }
+
+    fun saveCustomDebugSecret(context: Context, secret: String) {
+        val trimmed = secret.trim()
+        if (trimmed.isBlank()) {
+            _uiState.value = _uiState.value.copy(feedbackMessage = "Il token non può essere vuoto.")
+            return
+        }
+        val ok = AppCheckHelper.setCustomDebugSecret(context, trimmed)
+        if (ok) {
+            _uiState.value = _uiState.value.copy(
+                appCheckDiagnostics = _uiState.value.appCheckDiagnostics?.copy(
+                    debugSecret = trimmed,
+                    tokenState = AppCheckTokenState.NotChecked
+                ),
+                feedbackMessage = "Nuovo Debug Secret salvato localmente! Ora verifica il token."
+            )
+        } else {
+            _uiState.value = _uiState.value.copy(feedbackMessage = "Errore durante il salvataggio del token.")
         }
     }
 

@@ -452,6 +452,8 @@ fun AiScriptGeneratorModal(
                 // Real Error message box if failed
                 if (!errorMessage.isNullOrBlank()) {
                     item {
+                        val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                        val context = androidx.compose.ui.platform.LocalContext.current
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -460,14 +462,27 @@ fun AiScriptGeneratorModal(
                                 .border(1.dp, LuxYoutubeRed.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                                 .padding(10.dp)
                         ) {
-                            Column {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(imageVector = Icons.Filled.ErrorOutline, contentDescription = null, tint = LuxYoutubeRed, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(text = "Dettaglio Errore Generazione:", color = LuxYoutubeRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(text = errorMessage, color = LuxTextPrimary, fontSize = 11.sp, lineHeight = 15.sp)
+                                if (errorMessage.contains("App Check", ignoreCase = true) || errorMessage.contains("debug", ignoreCase = true)) {
+                                    val secret = com.example.util.AppCheckHelper.getOrCreateDebugSecret(context)
+                                    OutlinedButton(
+                                        onClick = {
+                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(secret))
+                                        },
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.align(Alignment.End)
+                                    ) {
+                                        Icon(imageVector = Icons.Filled.ContentCopy, contentDescription = null, tint = LuxGoldPrimary, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(text = "Copia Debug Secret", color = LuxGoldPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         }
                     }
