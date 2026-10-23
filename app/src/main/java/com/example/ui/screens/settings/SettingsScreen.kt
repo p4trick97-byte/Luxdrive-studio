@@ -419,8 +419,8 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val models = listOf(
-                                "gemini-3.8-flash" to "gemini-3.8-flash\n(Predefinito)",
-                                "gemini-3.5-flash-lite" to "gemini-3.5-flash-lite\n(Alternativo)"
+                                "gemini-3.5-flash-lite" to "gemini-3.5-flash-lite\n(Predefinito)",
+                                "gemini-3.8-flash" to "gemini-3.8-flash\n(Alternativo)"
                             )
                             models.forEach { (modelId, label) ->
                                 val isSelected = state.selectedGeminiTestModel == modelId

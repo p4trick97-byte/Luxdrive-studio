@@ -127,7 +127,7 @@ class VideoLabViewModel(
         viewModelScope.launch {
             _state.value = _state.value.copy(
                 isGeneratingAi = true,
-                aiGenerationProgress = "Connessione a Gemini 3.8 Flash...",
+                aiGenerationProgress = "Connessione a Gemini 3.5 Flash Lite...",
                 aiGenerationError = null,
                 lastAiRequest = request
             )

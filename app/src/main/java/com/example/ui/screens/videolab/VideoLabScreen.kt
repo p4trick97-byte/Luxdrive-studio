@@ -432,7 +432,7 @@ fun AiScriptGeneratorModal(
                 // Backend integration status indicator
                 item {
                     val (statusText, statusColor) = when (backendStatus) {
-                        is AiBackendStatus.FirebaseAiLogicActive -> "Connessione: Firebase AI Logic attivo (Gemini 3.8 Flash)" to LuxGreenGrowth
+                        is AiBackendStatus.FirebaseAiLogicActive -> "Connessione: Firebase AI Logic attivo (Gemini 3.5 Flash Lite)" to LuxGreenGrowth
                         is AiBackendStatus.NotConfigured -> "Integrazione non configurata (Richiede google-services.json)" to LuxWarningAmber
                     }
                     Box(
@@ -466,7 +466,7 @@ fun AiScriptGeneratorModal(
                                 CircularProgressIndicator(color = LuxGoldPrimary, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
-                                    Text(text = "Streaming Gemini 3.8 Flash attivo", color = LuxGoldPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(text = "Elaborazione Gemini 3.5 Flash Lite attiva", color = LuxGoldPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     Text(text = generationProgress ?: "Connessione ed elaborazione...", color = LuxTextSecondary, fontSize = 10.sp)
                                 }
                             }

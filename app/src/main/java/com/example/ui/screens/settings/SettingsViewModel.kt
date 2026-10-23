@@ -30,7 +30,7 @@ data class SettingsUiState(
     val appCheckDiagnostics: AppCheckDiagnostics? = null,
     val isVerifyingAppCheck: Boolean = false,
     // Gemini AI connection test
-    val selectedGeminiTestModel: String = "gemini-3.8-flash",
+    val selectedGeminiTestModel: String = GeminiAutomotiveAiClient.DEFAULT_MODEL,
     val isTestingGemini: Boolean = false,
     val geminiTestResult: GeminiTestResult? = null
 )

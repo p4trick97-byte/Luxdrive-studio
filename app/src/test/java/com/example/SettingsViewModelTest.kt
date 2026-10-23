@@ -47,19 +47,19 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun defaultState_hasGemini38FlashSelected() {
-        assertEquals("gemini-3.8-flash", viewModel.uiState.value.selectedGeminiTestModel)
+    fun defaultState_hasGemini35FlashLiteSelected() {
+        assertEquals("gemini-3.5-flash-lite", viewModel.uiState.value.selectedGeminiTestModel)
         assertFalse(viewModel.uiState.value.isTestingGemini)
         assertNull(viewModel.uiState.value.geminiTestResult)
     }
 
     @Test
     fun selectGeminiTestModel_switchesModelAndResetsPreviousResult() {
-        viewModel.selectGeminiTestModel("gemini-3.5-flash-lite")
-        assertEquals("gemini-3.5-flash-lite", viewModel.uiState.value.selectedGeminiTestModel)
-        assertNull(viewModel.uiState.value.geminiTestResult)
-
         viewModel.selectGeminiTestModel("gemini-3.8-flash")
         assertEquals("gemini-3.8-flash", viewModel.uiState.value.selectedGeminiTestModel)
+        assertNull(viewModel.uiState.value.geminiTestResult)
+
+        viewModel.selectGeminiTestModel("gemini-3.5-flash-lite")
+        assertEquals("gemini-3.5-flash-lite", viewModel.uiState.value.selectedGeminiTestModel)
     }
 }

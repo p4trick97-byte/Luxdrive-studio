@@ -55,6 +55,13 @@ data class Phase2Result(
 
 class GeminiAutomotiveAiClient(private val context: Context) {
 
+    companion object {
+        const val DEFAULT_MODEL = "gemini-3.5-flash-lite"
+        const val ALTERNATIVE_MODEL = "gemini-3.8-flash"
+    }
+
+    fun getDefaultModel(): String = DEFAULT_MODEL
+
     fun getBackendStatus(): AiBackendStatus {
         if (AppCheckHelper.isFirebaseConfigured(context)) {
             return AiBackendStatus.FirebaseAiLogicActive
@@ -70,7 +77,7 @@ class GeminiAutomotiveAiClient(private val context: Context) {
         )
     }
 
-    suspend fun testConnection(modelName: String = "gemini-3.8-flash"): GeminiTestResult = withContext(Dispatchers.IO) {
+    suspend fun testConnection(modelName: String = DEFAULT_MODEL): GeminiTestResult = withContext(Dispatchers.IO) {
         val status = getBackendStatus()
         if (status is AiBackendStatus.NotConfigured) {
             return@withContext GeminiTestResult(
@@ -132,13 +139,14 @@ class GeminiAutomotiveAiClient(private val context: Context) {
 
     suspend fun generateScript(
         request: AiScriptRequest,
+        modelName: String = DEFAULT_MODEL,
         onProgress: ((String) -> Unit)? = null
     ): Result<GeneratedAutomotiveScript> = withContext(Dispatchers.IO) {
         val status = getBackendStatus()
 
         when (status) {
             is AiBackendStatus.FirebaseAiLogicActive -> {
-                generateViaFirebaseAiLogic(request, onProgress)
+                generateViaFirebaseAiLogic(request, modelName, onProgress)
             }
             is AiBackendStatus.NotConfigured -> {
                 Result.failure(AiNotConfiguredException(status.explanation))
@@ -148,6 +156,7 @@ class GeminiAutomotiveAiClient(private val context: Context) {
 
     private suspend fun generateViaFirebaseAiLogic(
         request: AiScriptRequest,
+        modelName: String = DEFAULT_MODEL,
         onProgress: ((String) -> Unit)? = null
     ): Result<GeneratedAutomotiveScript> {
         return try {
@@ -155,16 +164,17 @@ class GeminiAutomotiveAiClient(private val context: Context) {
                 responseMimeType = "application/json"
             }
 
+            // Using the verified operational model gemini-3.5-flash-lite for all generation phases
             val model = Firebase.ai.generativeModel(
-                modelName = "gemini-3.8-flash",
+                modelName = modelName,
                 generationConfig = config,
                 systemInstruction = com.google.firebase.ai.type.content {
                     text(AutomotivePromptBuilder.buildSystemInstruction())
                 }
             )
 
-            // FASE 1: Sceneggiatura principale, hook e narrazione (evita DEADLINE_EXCEEDED durante decode)
-            onProgress?.invoke("Fase 1/2: Generazione sceneggiatura e hook con Gemini 3.8 Flash...")
+            // FASE 1: Sceneggiatura principale, hook e narrazione con gemini-3.5-flash-lite
+            onProgress?.invoke("Fase 1/2: Generazione sceneggiatura e hook con Gemini 3.5 Flash Lite...")
             val phase1Prompt = AutomotivePromptBuilder.buildPhase1Prompt(request)
 
             val phase1Raw = withTimeout(60_000L) {
@@ -178,8 +188,8 @@ class GeminiAutomotiveAiClient(private val context: Context) {
 
             val phase1Result = parsePhase1Json(phase1Raw)
 
-            // FASE 2: Storyboard, CapCut e asset social basati sul titolo e hook confermati
-            onProgress?.invoke("Fase 2/2: Generazione storyboard, CapCut e asset social...")
+            // FASE 2: Storyboard, CapCut e asset social basati sul titolo e hook confermati con gemini-3.5-flash-lite
+            onProgress?.invoke("Fase 2/2: Generazione storyboard, CapCut e asset social con Gemini 3.5 Flash Lite...")
             val phase2Prompt = AutomotivePromptBuilder.buildPhase2Prompt(
                 request = request,
                 title = phase1Result.title,
@@ -204,7 +214,7 @@ class GeminiAutomotiveAiClient(private val context: Context) {
             Log.e(TAG, "Generazione Firebase AI Logic scaduta", e)
             Result.failure(
                 IllegalStateException(
-                    "La richiesta a Gemini ha superato il tempo limite consentito. " +
+                    "La richiesta a Gemini ($modelName) ha superato il tempo limite consentito. " +
                         "La risposta ha impiegato troppo tempo o la connessione di rete è rallentata. Nessun progetto corrotto è stato salvato. Riprova."
                 )
             )

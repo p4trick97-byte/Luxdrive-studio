@@ -173,4 +173,11 @@ class AutomotiveScriptParserTest {
     fun parsePhase2Json_throwsOnEmpty() {
         client.parsePhase2Json("")
     }
+
+    @Test
+    fun defaultModel_isGemini35FlashLite_forAllGenerationPhases() {
+        assertEquals("gemini-3.5-flash-lite", GeminiAutomotiveAiClient.DEFAULT_MODEL)
+        assertEquals("gemini-3.5-flash-lite", client.getDefaultModel())
+        assertEquals("gemini-3.8-flash", GeminiAutomotiveAiClient.ALTERNATIVE_MODEL)
+    }
 }
