@@ -7,6 +7,8 @@ import com.example.data.repository.AnalyticsRepository
 import com.example.data.repository.IntegrationBridgeManager
 import com.example.data.repository.VideoProjectRepository
 import com.example.data.repository.YouTubeApiConfig
+import com.example.data.service.GeminiAutomotiveAiClient
+import com.example.data.service.GeminiTestResult
 import com.example.util.AppCheckDiagnostics
 import com.example.util.AppCheckHelper
 import com.example.util.AppCheckTokenState
@@ -26,17 +28,57 @@ data class SettingsUiState(
     val feedbackMessage: String? = null,
     // App Check diagnostics
     val appCheckDiagnostics: AppCheckDiagnostics? = null,
-    val isVerifyingAppCheck: Boolean = false
+    val isVerifyingAppCheck: Boolean = false,
+    // Gemini AI connection test
+    val selectedGeminiTestModel: String = "gemini-3.8-flash",
+    val isTestingGemini: Boolean = false,
+    val geminiTestResult: GeminiTestResult? = null
 )
 
 class SettingsViewModel(
     private val analyticsRepository: AnalyticsRepository,
     private val projectRepository: VideoProjectRepository,
-    private val integrationBridge: IntegrationBridgeManager
+    private val integrationBridge: IntegrationBridgeManager,
+    private val aiClient: GeminiAutomotiveAiClient? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    fun selectGeminiTestModel(modelName: String) {
+        _uiState.value = _uiState.value.copy(
+            selectedGeminiTestModel = modelName,
+            geminiTestResult = null
+        )
+    }
+
+    fun testGeminiConnection() {
+        if (_uiState.value.isTestingGemini) return
+        val client = aiClient
+        if (client == null) {
+            _uiState.value = _uiState.value.copy(
+                feedbackMessage = "Client AI non disponibile per il test."
+            )
+            return
+        }
+        val model = _uiState.value.selectedGeminiTestModel
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isTestingGemini = true,
+                geminiTestResult = null
+            )
+            val result = client.testConnection(model)
+            _uiState.value = _uiState.value.copy(
+                isTestingGemini = false,
+                geminiTestResult = result,
+                feedbackMessage = if (result.isSuccess) {
+                    "Test Gemini completato con successo in ${result.durationMs}ms!"
+                } else {
+                    "Test Gemini fallito: ${result.errorMessage ?: "Errore"}"
+                }
+            )
+        }
+    }
 
     init {
         viewModelScope.launch {

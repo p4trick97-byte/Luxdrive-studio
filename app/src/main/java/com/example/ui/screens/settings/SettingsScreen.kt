@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.ContentCopy
@@ -344,6 +345,219 @@ fun SettingsScreen(
                                         ) {
                                             Text("Annulla", color = LuxTextMuted, fontSize = 11.sp)
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Gemini AI Developer API Connection Test Card
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(LuxSurfaceCard)
+                        .border(1.dp, LuxGoldBorder.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                        .padding(14.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = LuxGoldPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Test Connessione Gemini",
+                                    color = LuxTextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(LuxGoldPrimary.copy(alpha = 0.15f))
+                                    .border(0.5.dp, LuxGoldPrimary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Firebase AI Logic",
+                                    color = LuxGoldPrimary,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "Invia una richiesta minima ('Rispondi esclusivamente con OK') per diagnosticare lo stato dell'inferenza, la latenza di rete e la risposta del server Firebase prima di lanciare la generazione completa.",
+                            color = LuxTextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        )
+
+                        Text(
+                            text = "Seleziona il modello da testare:",
+                            color = LuxTextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val models = listOf(
+                                "gemini-3.8-flash" to "gemini-3.8-flash\n(Predefinito)",
+                                "gemini-3.5-flash-lite" to "gemini-3.5-flash-lite\n(Alternativo)"
+                            )
+                            models.forEach { (modelId, label) ->
+                                val isSelected = state.selectedGeminiTestModel == modelId
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) LuxGoldPrimary.copy(alpha = 0.18f) else LuxSurfaceElevated)
+                                        .border(
+                                            width = if (isSelected) 1.5.dp else 0.5.dp,
+                                            color = if (isSelected) LuxGoldPrimary else LuxSurfaceBorder,
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable(enabled = !state.isTestingGemini) {
+                                            viewModel.selectGeminiTestModel(modelId)
+                                        }
+                                        .padding(vertical = 8.dp, horizontal = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = if (isSelected) LuxGoldAccent else LuxTextSecondary,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        lineHeight = 13.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = { viewModel.testGeminiConnection() },
+                            enabled = !state.isTestingGemini,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LuxGoldPrimary,
+                                contentColor = Color(0xFF121006)
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("test_gemini_connection_button")
+                        ) {
+                            if (state.isTestingGemini) {
+                                CircularProgressIndicator(
+                                    color = Color(0xFF121006),
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Invio richiesta minima in corso...",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = Color(0xFF121006),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Test connessione Gemini",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        // Detailed result box
+                        state.geminiTestResult?.let { res ->
+                            if (res.isSuccess) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(LuxGreenGrowth.copy(alpha = 0.12f))
+                                        .border(0.5.dp, LuxGreenGrowth.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Filled.CheckCircle,
+                                                contentDescription = null,
+                                                tint = LuxGreenGrowth,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Inferenza completata con successo!",
+                                                color = LuxGreenGrowth,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Text(
+                                            text = "• Modello: ${res.modelName}\n• Durata: ${res.durationMs} ms\n• Risposta server: \"${res.responseText}\"",
+                                            color = LuxTextSecondary,
+                                            fontSize = 10.sp,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(LuxYoutubeRed.copy(alpha = 0.12f))
+                                        .border(0.5.dp, LuxYoutubeRed.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Filled.ErrorOutline,
+                                                contentDescription = null,
+                                                tint = LuxYoutubeRed,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Richiesta non riuscita (durata: ${res.durationMs} ms)",
+                                                color = LuxYoutubeRed,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Text(
+                                            text = "Modello testato: ${res.modelName}\nErrore SDK originale:\n${res.errorMessage}",
+                                            color = LuxTextSecondary,
+                                            fontSize = 10.sp,
+                                            lineHeight = 14.sp
+                                        )
                                     }
                                 }
                             }

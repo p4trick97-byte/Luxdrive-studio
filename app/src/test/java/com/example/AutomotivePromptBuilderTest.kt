@@ -67,4 +67,46 @@ class AutomotivePromptBuilderTest {
         assertTrue(prompt.contains("45-60 secondi"))
         assertFalse(prompt.contains("Note e fonti fornite dall'utente:"))
     }
+
+    @Test
+    fun buildPhase1Prompt_focusesOnCoreNarrativeAndFacts() {
+        val request = AiScriptRequest(
+            carTopic = "Ferrari SF90 XX Stradale",
+            format = ProjectFormat.LONG_VIDEO,
+            durationMinutes = 8,
+            contentGoal = "Analisi aerodinamica e costi reali",
+            category = AutomotiveCategory.SUPERCAR_AND_HYPERCAR,
+            narrativeTone = "Autorevole & Analitico"
+        )
+
+        val prompt = AutomotivePromptBuilder.buildPhase1Prompt(request)
+
+        assertTrue(prompt.contains("FASE 1/2"))
+        assertTrue(prompt.contains("Ferrari SF90 XX Stradale"))
+        assertTrue(prompt.contains("fullScript"))
+        assertTrue(prompt.contains("verifiedFactsNotice"))
+        assertTrue(prompt.contains("researchAndSources"))
+    }
+
+    @Test
+    fun buildPhase2Prompt_focusesOnStoryboardCapCutAndSocials() {
+        val request = AiScriptRequest(
+            carTopic = "Ferrari SF90 XX Stradale",
+            format = ProjectFormat.LONG_VIDEO
+        )
+
+        val prompt = AutomotivePromptBuilder.buildPhase2Prompt(
+            request = request,
+            title = "Ferrari SF90 XX: L'Alettone Fisso e i Costi Reali",
+            hook = "1030 cavalli e un carico da GT3."
+        )
+
+        assertTrue(prompt.contains("FASE 2/2"))
+        assertTrue(prompt.contains("Ferrari SF90 XX: L'Alettone Fisso"))
+        assertTrue(prompt.contains("storyboardSummary"))
+        assertTrue(prompt.contains("capcutEditingNotes"))
+        assertTrue(prompt.contains("shortsDerivedScript"))
+        assertTrue(prompt.contains("tiktokAdaptation"))
+        assertTrue(prompt.contains("instagramReelAdaptation"))
+    }
 }

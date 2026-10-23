@@ -113,4 +113,64 @@ class AutomotiveScriptParserTest {
     fun parseJsonToScript_throwsWhenEssentialFieldsMissing() {
         client.parseJsonToScript("""{"randomField": "test"}""")
     }
+
+    @Test
+    fun parsePhase1Json_and_parsePhase2Json_andMergeSuccessfully() {
+        val phase1Json = """
+            {
+              "title": "Bugatti Tourbillon: 1800 CV V16 Aspirato",
+              "youtubeTitleAlternative": "La Fine dei Turbo in Casa Bugatti?",
+              "hook": "9000 giri senza turbo: l'orologeria meccanica applicata a un motore.",
+              "fullScript": "Narrazione completa Fase 1 per LuxDrive...",
+              "voiceOverNotes": "Tono solenne ed epico",
+              "verifiedFactsNotice": "Fatti verificati: motore Cosworth 8.3L V16",
+              "researchAndSources": "Comunicato stampa Bugatti Rimac"
+            }
+        """.trimIndent()
+
+        val phase2Json = """
+            {
+              "storyboardSummary": "Scena 1: Dettaglio del quadro strumenti analogico in titanio",
+              "capcutEditingNotes": "Zoom lento sul tachimetro meccanico, audio scarico a -22dB",
+              "description": "Analisi approfondita della nuova hypercar Bugatti",
+              "chaptersText": "0:00 Intro\n1:00 Il V16 Cosworth",
+              "tags": "luxdrive, bugatti, tourbillon, v16",
+              "thumbnailConcept": "Primo piano sul quadro strumenti stile orologio con accenti oro",
+              "shortsDerivedScript": "Questo tachimetro costa come una Porsche 911.",
+              "tiktokAdaptation": "Video dinamico con suono del V16 in primo piano",
+              "instagramReelAdaptation": "Reel cinematico con montaggio ad alto contrasto"
+            }
+        """.trimIndent()
+
+        val p1 = client.parsePhase1Json(phase1Json)
+        val p2 = client.parsePhase2Json(phase2Json)
+        val merged = client.mergeScriptPhases(p1, p2)
+
+        assertEquals("Bugatti Tourbillon: 1800 CV V16 Aspirato", merged.title)
+        assertEquals("La Fine dei Turbo in Casa Bugatti?", merged.youtubeTitleAlternative)
+        assertTrue(merged.hook.contains("9000 giri"))
+        assertTrue(merged.fullScript.contains("Fase 1"))
+        assertEquals("Tono solenne ed epico", merged.voiceOverNotes)
+        assertTrue(merged.verifiedFactsNotice.contains("Cosworth"))
+        assertTrue(merged.storyboardSummary.contains("quadro strumenti"))
+        assertTrue(merged.capcutEditingNotes.contains("CapCut") || merged.capcutEditingNotes.contains("tachimetro"))
+        assertTrue(merged.chaptersText.contains("0:00 Intro"))
+        assertTrue(merged.tags.contains("bugatti"))
+        assertTrue(merged.shortsDerivedScript.contains("Porsche 911"))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun parsePhase1Json_throwsOnMissingEssentialFields() {
+        client.parsePhase1Json("""{"randomField": "value"}""")
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun parsePhase1Json_throwsOnEmpty() {
+        client.parsePhase1Json("")
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun parsePhase2Json_throwsOnEmpty() {
+        client.parsePhase2Json("")
+    }
 }

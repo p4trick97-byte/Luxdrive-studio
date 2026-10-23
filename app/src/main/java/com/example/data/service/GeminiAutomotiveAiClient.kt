@@ -23,6 +23,36 @@ sealed interface AiBackendStatus {
     data class NotConfigured(val explanation: String) : AiBackendStatus
 }
 
+data class GeminiTestResult(
+    val isSuccess: Boolean,
+    val modelName: String,
+    val durationMs: Long,
+    val responseText: String? = null,
+    val errorMessage: String? = null
+)
+
+data class Phase1Result(
+    val title: String,
+    val youtubeTitleAlternative: String,
+    val hook: String,
+    val fullScript: String,
+    val voiceOverNotes: String,
+    val verifiedFactsNotice: String,
+    val researchAndSources: String
+)
+
+data class Phase2Result(
+    val storyboardSummary: String,
+    val capcutEditingNotes: String,
+    val description: String,
+    val chaptersText: String,
+    val tags: String,
+    val thumbnailConcept: String,
+    val shortsDerivedScript: String,
+    val tiktokAdaptation: String,
+    val instagramReelAdaptation: String
+)
+
 class GeminiAutomotiveAiClient(private val context: Context) {
 
     fun getBackendStatus(): AiBackendStatus {
@@ -38,6 +68,66 @@ class GeminiAutomotiveAiClient(private val context: Context) {
                 "3. Verifica che Firebase AI Logic (Gemini Developer API) sia abilitato nella Firebase Console del progetto.\n\n" +
                 "In assenza della configurazione Firebase, non verranno generati contenuti fittizi."
         )
+    }
+
+    suspend fun testConnection(modelName: String = "gemini-3.8-flash"): GeminiTestResult = withContext(Dispatchers.IO) {
+        val status = getBackendStatus()
+        if (status is AiBackendStatus.NotConfigured) {
+            return@withContext GeminiTestResult(
+                isSuccess = false,
+                modelName = modelName,
+                durationMs = 0L,
+                errorMessage = status.explanation
+            )
+        }
+
+        val startTime = System.currentTimeMillis()
+        try {
+            val model = Firebase.ai.generativeModel(
+                modelName = modelName
+            )
+            val response = withTimeout(30_000L) {
+                model.generateContent("Rispondi esclusivamente con OK")
+            }
+            val durationMs = System.currentTimeMillis() - startTime
+            val text = response.text?.trim().orEmpty()
+
+            if (text.isBlank()) {
+                GeminiTestResult(
+                    isSuccess = false,
+                    modelName = modelName,
+                    durationMs = durationMs,
+                    errorMessage = "Risposta vuota ricevuta dal modello $modelName."
+                )
+            } else {
+                GeminiTestResult(
+                    isSuccess = true,
+                    modelName = modelName,
+                    durationMs = durationMs,
+                    responseText = text
+                )
+            }
+        } catch (e: TimeoutCancellationException) {
+            val durationMs = System.currentTimeMillis() - startTime
+            GeminiTestResult(
+                isSuccess = false,
+                modelName = modelName,
+                durationMs = durationMs,
+                errorMessage = "Timeout richiesta minima (30s superati) per il modello $modelName."
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val durationMs = System.currentTimeMillis() - startTime
+            Log.e(TAG, "Test connessione fallito per $modelName", e)
+            val rawMsg = e.localizedMessage ?: e.message ?: e::class.java.simpleName
+            GeminiTestResult(
+                isSuccess = false,
+                modelName = modelName,
+                durationMs = durationMs,
+                errorMessage = rawMsg
+            )
+        }
     }
 
     suspend fun generateScript(
@@ -61,12 +151,10 @@ class GeminiAutomotiveAiClient(private val context: Context) {
         onProgress: ((String) -> Unit)? = null
     ): Result<GeneratedAutomotiveScript> {
         return try {
-            val prompt = AutomotivePromptBuilder.buildPrompt(request)
             val config = generationConfig {
                 responseMimeType = "application/json"
             }
 
-            // Using official Firebase AI Logic SDK with supported Gemini Developer API model
             val model = Firebase.ai.generativeModel(
                 modelName = "gemini-3.8-flash",
                 generationConfig = config,
@@ -75,57 +163,49 @@ class GeminiAutomotiveAiClient(private val context: Context) {
                 }
             )
 
-            onProgress?.invoke("Connessione a Gemini 3.8 Flash...")
+            // FASE 1: Sceneggiatura principale, hook e narrazione (evita DEADLINE_EXCEEDED durante decode)
+            onProgress?.invoke("Fase 1/2: Generazione sceneggiatura e hook con Gemini 3.8 Flash...")
+            val phase1Prompt = AutomotivePromptBuilder.buildPhase1Prompt(request)
 
-            val rawText = withTimeout(GENERATION_TIMEOUT_MS) {
-                // Try progressive streaming first to reduce perceived latency and maintain an active socket
-                var streamFailed = false
-                val accumulated = StringBuilder()
-                var chunkCount = 0
-
-                try {
-                    val stream = model.generateContentStream(prompt)
-                    stream.collect { chunk ->
-                        val piece = chunk.text.orEmpty()
-                        if (piece.isNotEmpty()) {
-                            accumulated.append(piece)
-                            chunkCount++
-                            onProgress?.invoke("Generazione in corso: $chunkCount blocchi ricevuti...")
-                        }
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(TAG, "Streaming non riuscito, tentato fallback unario: ${e.message}")
-                    streamFailed = true
-                    if (accumulated.isNotEmpty()) {
-                        // Se sono già stati ricevuti frammenti e la connessione si è interrotta, propaghiamo l'errore
-                        throw e
-                    }
-                }
-
-                if (!streamFailed && accumulated.isNotBlank()) {
-                    accumulated.toString()
-                } else {
-                    onProgress?.invoke("Attesa completamento script da Gemini...")
-                    val unaryResponse = model.generateContent(prompt)
-                    unaryResponse.text.orEmpty()
-                }
+            val phase1Raw = withTimeout(60_000L) {
+                val res = model.generateContent(phase1Prompt)
+                res.text.orEmpty()
             }
 
-            if (rawText.isBlank()) {
-                throw IllegalStateException("Il modello Gemini ha restituito una risposta vuota.")
+            if (phase1Raw.isBlank()) {
+                throw IllegalStateException("Fase 1 non riuscita: risposta vuota ricevuta da Gemini.")
             }
 
-            onProgress?.invoke("Validazione e parsing della sceneggiatura...")
-            val parsed = parseJsonToScript(rawText)
-            Result.success(parsed)
+            val phase1Result = parsePhase1Json(phase1Raw)
+
+            // FASE 2: Storyboard, CapCut e asset social basati sul titolo e hook confermati
+            onProgress?.invoke("Fase 2/2: Generazione storyboard, CapCut e asset social...")
+            val phase2Prompt = AutomotivePromptBuilder.buildPhase2Prompt(
+                request = request,
+                title = phase1Result.title,
+                hook = phase1Result.hook
+            )
+
+            val phase2Raw = withTimeout(60_000L) {
+                val res = model.generateContent(phase2Prompt)
+                res.text.orEmpty()
+            }
+
+            if (phase2Raw.isBlank()) {
+                throw IllegalStateException("Fase 2 non riuscita: risposta vuota ricevuta da Gemini per storyboard e CapCut.")
+            }
+
+            val phase2Result = parsePhase2Json(phase2Raw)
+
+            onProgress?.invoke("Validazione e assemblaggio finale del progetto...")
+            val fullScript = mergeScriptPhases(phase1Result, phase2Result)
+            Result.success(fullScript)
         } catch (e: TimeoutCancellationException) {
-            Log.e(TAG, "Generazione Firebase AI Logic scaduta dopo ${GENERATION_TIMEOUT_MS / 1000}s", e)
+            Log.e(TAG, "Generazione Firebase AI Logic scaduta", e)
             Result.failure(
                 IllegalStateException(
-                    "La generazione dello script ha superato il tempo limite di ${GENERATION_TIMEOUT_MS / 1000} secondi. " +
-                        "La risposta di Gemini ha impiegato troppo tempo o la connessione di rete è rallentata. Nessun progetto corrotto è stato salvato. Riprova."
+                    "La richiesta a Gemini ha superato il tempo limite consentito. " +
+                        "La risposta ha impiegato troppo tempo o la connessione di rete è rallentata. Nessun progetto corrotto è stato salvato. Riprova."
                 )
             )
         } catch (e: CancellationException) {
@@ -134,6 +214,9 @@ class GeminiAutomotiveAiClient(private val context: Context) {
             Log.e(TAG, "Errore durante la generazione Firebase AI Logic", e)
             val rawMsg = e.message.orEmpty()
             val friendlyMsg = when {
+                rawMsg.contains("DEADLINE_EXCEEDED", ignoreCase = true) ||
+                rawMsg.contains("Deadline exceeded", ignoreCase = true) ->
+                    "Timeout server Gemini (DEADLINE_EXCEEDED durante il decode). La richiesta è ora suddivisa in due fasi per ridurre i token per richiesta. Riprova: se il carico persiste, effettua prima un test di connessione nelle Impostazioni."
                 rawMsg.contains("Firebase App Check token is invalid", ignoreCase = true) ||
                 rawMsg.contains("App Check", ignoreCase = true) ||
                 rawMsg.contains("AppCheck", ignoreCase = true) ||
@@ -162,6 +245,83 @@ class GeminiAutomotiveAiClient(private val context: Context) {
             }
             Result.failure(IllegalStateException(friendlyMsg, e))
         }
+    }
+
+    fun parsePhase1Json(rawInput: String): Phase1Result {
+        val cleanJson = cleanMarkdownJson(rawInput)
+        if (cleanJson.isBlank()) {
+            throw IllegalStateException("La risposta della Fase 1 è vuota. Nessun progetto salvato.")
+        }
+
+        val json = try {
+            JSONObject(cleanJson)
+        } catch (e: Exception) {
+            throw IllegalStateException("Risposta della Fase 1 non conforme al formato JSON. Nessun progetto corrotto è stato salvato.", e)
+        }
+
+        val title = json.optString("title", "").trim()
+        val fullScript = json.optString("fullScript", "").trim()
+        val hook = json.optString("hook", "").trim()
+
+        if (title.isBlank() && fullScript.isBlank() && hook.isBlank()) {
+            throw IllegalStateException("La risposta JSON della Fase 1 non contiene titolo, hook o script.")
+        }
+
+        return Phase1Result(
+            title = if (title.isNotBlank()) title else "Progetto LuxDrive",
+            youtubeTitleAlternative = json.optString("youtubeTitleAlternative", ""),
+            hook = hook,
+            fullScript = fullScript,
+            voiceOverNotes = json.optString("voiceOverNotes", ""),
+            verifiedFactsNotice = json.optString("verifiedFactsNotice", ""),
+            researchAndSources = json.optString("researchAndSources", "")
+        )
+    }
+
+    fun parsePhase2Json(rawInput: String): Phase2Result {
+        val cleanJson = cleanMarkdownJson(rawInput)
+        if (cleanJson.isBlank()) {
+            throw IllegalStateException("La risposta della Fase 2 è vuota. Nessun progetto salvato.")
+        }
+
+        val json = try {
+            JSONObject(cleanJson)
+        } catch (e: Exception) {
+            throw IllegalStateException("Risposta della Fase 2 non conforme al formato JSON. Nessun progetto corrotto è stato salvato.", e)
+        }
+
+        return Phase2Result(
+            storyboardSummary = json.optString("storyboardSummary", ""),
+            capcutEditingNotes = json.optString("capcutEditingNotes", ""),
+            description = json.optString("description", ""),
+            chaptersText = json.optString("chaptersText", ""),
+            tags = json.optString("tags", "luxdrive, automotive"),
+            thumbnailConcept = json.optString("thumbnailConcept", ""),
+            shortsDerivedScript = json.optString("shortsDerivedScript", ""),
+            tiktokAdaptation = json.optString("tiktokAdaptation", ""),
+            instagramReelAdaptation = json.optString("instagramReelAdaptation", "")
+        )
+    }
+
+    fun mergeScriptPhases(p1: Phase1Result, p2: Phase2Result): GeneratedAutomotiveScript {
+        return GeneratedAutomotiveScript(
+            title = p1.title,
+            youtubeTitleAlternative = p1.youtubeTitleAlternative,
+            hook = p1.hook,
+            fullScript = p1.fullScript,
+            voiceOverNotes = p1.voiceOverNotes,
+            researchAndSources = p1.researchAndSources,
+            storyboardSummary = p2.storyboardSummary,
+            capcutEditingNotes = p2.capcutEditingNotes,
+            description = p2.description,
+            chaptersText = p2.chaptersText,
+            tags = p2.tags,
+            thumbnailConcept = p2.thumbnailConcept,
+            shortsDerivedScript = p2.shortsDerivedScript,
+            tiktokAdaptation = p2.tiktokAdaptation,
+            instagramReelAdaptation = p2.instagramReelAdaptation,
+            verifiedFactsNotice = p1.verifiedFactsNotice
+        )
     }
 
     fun parseJsonToScript(rawInput: String): GeneratedAutomotiveScript {

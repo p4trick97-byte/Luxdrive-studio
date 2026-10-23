@@ -111,4 +111,82 @@ object AutomotivePromptBuilder {
             }
         """.trimIndent()
     }
+
+    fun buildPhase1Prompt(request: AiScriptRequest): String {
+        val estimatedWordTarget = if (request.format == ProjectFormat.LONG_VIDEO) {
+            val targetWords = (request.durationMinutes * 45).coerceIn(300, 500)
+            "circa $targetWords parole per il testo parlato (fullScript)"
+        } else {
+            "circa 90 - 130 parole per 45-60 secondi di video verticale"
+        }
+
+        return """
+            FASE 1/2: Genera la sceneggiatura principale, l'hook e le note di narrazione per il video LuxDrive Italia.
+
+            PARAMETRI:
+            - Modello/Argomento: ${request.carTopic}
+            - Formato: ${request.format.displayName} (${if (request.format == ProjectFormat.LONG_VIDEO) "16:9 Orizzontale" else "9:16 Verticale"})
+            - Durata richiesta: ${request.durationMinutes} minuti ($estimatedWordTarget)
+            - Categoria: ${request.category.displayName}
+            - Obiettivo: ${request.contentGoal}
+            - Tono narrativo: ${request.narrativeTone}
+            ${if (request.userSourcesOrNotes.isNotBlank()) "- Note e fonti fornite dall'utente: ${request.userSourcesOrNotes}" else ""}
+
+            REQUISITI SPECIFICI FASE 1:
+            1. Titolo principale potente e titolo alternativo A/B.
+            2. Hook magnetico per i primi 3-5 secondi.
+            3. fullScript: narrazione parlata completa divisa in sezioni (INTRO, SVILUPPO TECNICO/COSTI, CONCLUSIONE con invito ad iscriversi a LuxDrive).
+            4. voiceOverNotes: indicazioni concise su tono, ritmo ed enfasi per la registrazione.
+            5. verifiedFactsNotice: distinzione trasparente tra [FATTI VERIFICATI], [STIME/MEDIE] e [IPOTESI].
+            6. researchAndSources: fonti primarie ufficiali (ACI, registri, manuali).
+
+            Restituisci ESCLUSIVAMENTE un JSON valido con questa struttura:
+            {
+              "title": "Titolo principale del video",
+              "youtubeTitleAlternative": "Titolo alternativo per test A/B",
+              "hook": "Hook iniziale per i primi 3-5 secondi",
+              "fullScript": "Sceneggiatura parlata completa in italiano...",
+              "voiceOverNotes": "Indicazioni per il doppiaggio/voce",
+              "verifiedFactsNotice": "Classificazione tra Fatti verificati, Stime calcolate e Ipotesi",
+              "researchAndSources": "Fonti primarie raccomandate da consultare"
+            }
+        """.trimIndent()
+    }
+
+    fun buildPhase2Prompt(request: AiScriptRequest, title: String, hook: String): String {
+        return """
+            FASE 2/2: Genera gli asset di produzione video, montaggio CapCut e distribuzione social basati sulla sceneggiatura approvata.
+
+            CONTESTO DEL PROGETTO:
+            - Titolo: $title
+            - Hook: $hook
+            - Modello/Argomento: ${request.carTopic}
+            - Formato: ${request.format.displayName}
+            - Tono: ${request.narrativeTone}
+
+            REQUISITI SPECIFICI FASE 2:
+            1. storyboardSummary: 4-6 scene ordinate con indicazioni precise di b-roll ed effetti visivi.
+            2. capcutEditingNotes: guida step-by-step per montare il video in CapCut da smartphone (transizioni, tagli pause, testo e audio a -22dB).
+            3. description: descrizione pronta per YouTube con riassunto accattivante e call to action.
+            4. chaptersText: minutaggi ordinati (es. 0:00 Intro\n...).
+            5. tags: tag separati da virgola per YouTube.
+            6. thumbnailConcept: concept copertina ad alto contrasto (stile nero carbonio e oro).
+            7. shortsDerivedScript: versione autonoma verticale 9:16 di 30-45 secondi con ritmo rapido.
+            8. tiktokAdaptation: hook specifico e istruzioni per TikTok.
+            9. instagramReelAdaptation: stile visivo e musica consigliata per Instagram Reels.
+
+            Restituisci ESCLUSIVAMENTE un JSON valido con questa struttura:
+            {
+              "storyboardSummary": "Descrizione scena per scena con clip b-roll ed effetti visivi",
+              "capcutEditingNotes": "Guida pratica per il montaggio in CapCut da smartphone",
+              "description": "Descrizione completa per YouTube con call to action",
+              "chaptersText": "0:00 Introduzione\n1:15 ...",
+              "tags": "luxdrive, ferrari, supercar...",
+              "thumbnailConcept": "Idea grafica copertina stile nero e oro",
+              "shortsDerivedScript": "Script autonomo per Short 9:16",
+              "tiktokAdaptation": "Hook e istruzioni per TikTok",
+              "instagramReelAdaptation": "Concept per Instagram Reels"
+            }
+        """.trimIndent()
+    }
 }

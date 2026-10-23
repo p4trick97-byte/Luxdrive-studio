@@ -166,7 +166,7 @@ fun LuxDriveApp(
         factory = object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
-                return SettingsViewModel(analyticsRepository, projectRepository, integrationBridge) as T
+                return SettingsViewModel(analyticsRepository, projectRepository, integrationBridge, aiClient) as T
             }
         }
     )
