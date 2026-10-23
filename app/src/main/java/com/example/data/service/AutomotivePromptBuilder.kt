@@ -49,26 +49,25 @@ object AutomotivePromptBuilder {
                  * STIME E MEDIE DI MERCATO (es. svalutazione usata, consumi reali, preventivi kasko)
                  * IPOTESI E VALUTAZIONI EDITORIALI.
                - Suggerisci fonti primarie specifiche da consultare (ACI, registri storici, manuali d'officina ufficiali). Non fingere che fonti non verificate siano già state confermate.
-            3. CALIBRAZIONE DELLA DURATA E COMPLETEZZA:
+            3. CALIBRAZIONE DELLA DURATA E COMPLETEZZA SENZA RIDONDANZE:
                - La velocità media di parlato in un video YouTube è di circa 130-150 parole al minuto.
-               - Per un video lungo (es. 8 minuti), il campo fullScript DEVE essere un testo completo, approfondito e corposo (circa 800-1100 parole), strutturato in capitoli/sezioni chiari, con introduzione, sviluppo dei singoli blocchi, transizioni naturali e conclusione con call to action per l'iscrizione a LuxDrive. Non restituire riassunti di poche righe!
-               - Per uno Short (9:16), genera uno script autonomo completo con hook istantaneo (primi 3 secondi), ritmo incalzante (30-60 secondi di parlato, circa 90-140 parole), indicazioni visive e chiusura netta.
+               - Per un video lungo (es. 8 minuti), il campo fullScript deve essere completo, approfondito e incisivo (circa 350-550 parole ben strutturate), diviso in sezioni con introduzione, sviluppo analitico dei costi/prestazioni e conclusione con call to action per l'iscrizione a LuxDrive.
+               - Per uno Short (9:16), genera uno script autonomo con hook istantaneo nei primi 3 secondi (ritmo incalzante per 30-60 secondi di parlato, circa 90-130 parole) e chiusura netta.
             4. FORMATO DI RISPOSTA:
-               - Restituisci esclusivamente un oggetto JSON valido, conforme allo schema richiesto, senza preamboli, senza saluti e senza blocchi di codice markdown aggiuntivi.
+               - Restituisci esclusivamente un oggetto JSON valido e completo, conforme allo schema richiesto, senza preamboli, senza saluti e senza blocchi di codice markdown aggiuntivi.
         """.trimIndent()
     }
 
     fun buildPrompt(request: AiScriptRequest): String {
         val estimatedWordTarget = if (request.format == ProjectFormat.LONG_VIDEO) {
-            val minWords = (request.durationMinutes * 125).coerceAtLeast(600)
-            val maxWords = (request.durationMinutes * 155).coerceAtLeast(800)
-            "$minWords - $maxWords parole complessive per coprire circa ${request.durationMinutes} minuti di narrazione audio"
+            val targetWords = (request.durationMinutes * 50).coerceIn(350, 600)
+            "circa $targetWords parole complessive per il campo fullScript, calibrate per ${request.durationMinutes} minuti"
         } else {
-            "90 - 140 parole per circa 45-60 secondi di video verticale"
+            "circa 90 - 130 parole per 45-60 secondi di video verticale"
         }
 
         return """
-            Genera un progetto video automotive completo e professionale per il canale LuxDrive Italia con i seguenti parametri:
+            Genera un progetto video automotive completo e professionale per il canale YouTube LuxDrive Italia:
 
             PARAMETRI RICHIESTI:
             - Modello/Argomento: ${request.carTopic}
@@ -79,19 +78,19 @@ object AutomotivePromptBuilder {
             - Tono narrativo: ${request.narrativeTone}
             ${if (request.userSourcesOrNotes.isNotBlank()) "- Note e fonti fornite dall'utente: ${request.userSourcesOrNotes}" else ""}
 
-            REQUISITI DI STRUTTURA:
+            REQUISITI DI STRUTTURA (completi, densi di valore ma senza prolissità):
             1. Titolo YouTube principale magnetico ma credibile e titolo alternativo per A/B test.
             2. Hook iniziale (0-5 secondi) che catturi subito l'attenzione.
-            3. Full Script in italiano esteso e completo, suddiviso per sezioni (INTRODUZIONE, SVILUPPO DETTAGLIATO, CONSIDERAZIONI ECONOMICHE/TECNICHE, CONCLUSIONE E CTA).
-            4. Note per il voice-over (ritmo, pause, enfasi sui numeri).
-            5. Storyboard scena per scena con minutaggio, note su inquadrature/b-roll dell'auto, testi a schermo e sound design.
-            6. Istruzioni pratiche passo-passo per il montaggio in CapCut da smartphone (Samsung Galaxy/Android): formati, tagli pause, keyframe zoom su motore e cerchi, color grading cinematico scuro/oro e bilanciamento audio sottofondo a -22dB.
-            7. Descrizione YouTube formattata, capitoli con timestamp (es: 0:00 Intro, ...) e tag pertinenti.
-            8. Concept miniatura professionale ad alto contrasto con silhouette dell'auto e testo accattivante.
-            9. Versione Shorts derivata (script autonomo 9:16), con note di adattamento per TikTok e Instagram Reels.
-            10. Notifica di verifica delle fonti: elenco separato di [FATTI VERIFICATI], [STIME/MEDIE] e [IPOTESI EDITORIALI].
+            3. fullScript: narrazione completa in italiano, articolata in sezioni chiare (INTRODUZIONE, SVILUPPO DETTAGLIATO, CONSIDERAZIONI ECONOMICHE/TECNICHE, CONCLUSIONE con invito all'iscrizione a LuxDrive).
+            4. voiceOverNotes: indicazioni sintetiche su ritmo, pause ed enfasi.
+            5. storyboardSummary: 4-6 scene ordinate con indicazioni di b-roll dell'auto ed effetti sonori.
+            6. capcutEditingNotes: istruzioni pratiche passo-passo per il montaggio in CapCut da smartphone (formati, tagli pause, zoom su dettagli e audio a -22dB).
+            7. description: descrizione pronta per YouTube, chaptersText con minutaggi (es: 0:00 Intro...) e tags pertinenti.
+            8. thumbnailConcept: idea copertina ad alto contrasto in stile nero carbonio e oro.
+            9. shortsDerivedScript: versione autonoma 9:16 di 30-45 secondi, con note rapide di adattamento per TikTok e Instagram Reels.
+            10. verifiedFactsNotice: classificazione sintetica tra [FATTI VERIFICATI], [STIME/MEDIE] e [IPOTESI].
 
-            Restituisci la risposta ESCLUSIVAMENTE come JSON con questa struttura esatta:
+            Restituisci la risposta ESCLUSIVAMENTE come JSON valido con questa struttura esatta:
             {
               "title": "Titolo principale del video",
               "youtubeTitleAlternative": "Titolo alternativo per test A/B",

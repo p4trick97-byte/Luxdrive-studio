@@ -28,6 +28,7 @@ data class VideoLabUiState(
     val isSaving: Boolean = false,
     // AI Generation states
     val isGeneratingAi: Boolean = false,
+    val aiGenerationProgress: String? = null,
     val aiGenerationError: String? = null,
     val showAiGeneratorDialog: Boolean = false,
     val aiBackendStatus: AiBackendStatus = AiBackendStatus.NotConfigured("Inizializzazione in corso..."),
@@ -126,11 +127,17 @@ class VideoLabViewModel(
         viewModelScope.launch {
             _state.value = _state.value.copy(
                 isGeneratingAi = true,
+                aiGenerationProgress = "Connessione a Gemini 3.8 Flash...",
                 aiGenerationError = null,
                 lastAiRequest = request
             )
 
-            val result = aiClient.generateScript(request)
+            val result = aiClient.generateScript(
+                request = request,
+                onProgress = { progressMessage ->
+                    _state.value = _state.value.copy(aiGenerationProgress = progressMessage)
+                }
+            )
             result.fold(
                 onSuccess = { generatedScript ->
                     val projectToSave = if (targetExistingProjectId != null && targetExistingProjectId > 0) {
@@ -168,6 +175,7 @@ class VideoLabViewModel(
                     val savedId = projectRepository.saveProject(projectToSave)
                     _state.value = _state.value.copy(
                         isGeneratingAi = false,
+                        aiGenerationProgress = null,
                         showAiGeneratorDialog = false,
                         newlyCreatedProjectId = savedId,
                         currentEditingProject = projectToSave.copy(id = savedId),
@@ -177,6 +185,7 @@ class VideoLabViewModel(
                 onFailure = { error ->
                     _state.value = _state.value.copy(
                         isGeneratingAi = false,
+                        aiGenerationProgress = null,
                         aiGenerationError = error.localizedMessage ?: "Errore imprevisto durante la generazione."
                     )
                 }

@@ -98,4 +98,19 @@ class AutomotiveScriptParserTest {
     fun parseJsonToScript_throwsOnMalformedJson() {
         client.parseJsonToScript("This is definitely not a json string")
     }
+
+    @Test(expected = IllegalStateException::class)
+    fun parseJsonToScript_throwsOnTruncatedJson() {
+        client.parseJsonToScript("""{"title": "Ferrari 296 GTB", "hook": "Questo video """)
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun parseJsonToScript_throwsOnEmptyString() {
+        client.parseJsonToScript("   ")
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun parseJsonToScript_throwsWhenEssentialFieldsMissing() {
+        client.parseJsonToScript("""{"randomField": "test"}""")
+    }
 }

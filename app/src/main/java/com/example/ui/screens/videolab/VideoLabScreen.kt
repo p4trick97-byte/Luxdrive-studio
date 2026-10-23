@@ -348,6 +348,7 @@ fun VideoLabScreen(
         AiScriptGeneratorModal(
             backendStatus = state.aiBackendStatus,
             isGenerating = state.isGeneratingAi,
+            generationProgress = state.aiGenerationProgress,
             errorMessage = state.aiGenerationError,
             initialRequest = state.lastAiRequest,
             onDismiss = {
@@ -380,6 +381,7 @@ fun VideoLabScreen(
 fun AiScriptGeneratorModal(
     backendStatus: AiBackendStatus,
     isGenerating: Boolean,
+    generationProgress: String? = null,
     errorMessage: String?,
     initialRequest: AiScriptRequest?,
     onDismiss: () -> Unit,
@@ -445,6 +447,29 @@ fun AiScriptGeneratorModal(
                             Icon(imageVector = Icons.Filled.Info, contentDescription = null, tint = statusColor, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(text = statusText, color = statusColor, fontSize = 10.sp, lineHeight = 14.sp)
+                        }
+                    }
+                }
+
+                // Streaming / Generation Progress indicator banner
+                if (isGenerating) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LuxGoldPrimary.copy(alpha = 0.12f))
+                                .border(1.dp, LuxGoldPrimary.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                .padding(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(color = LuxGoldPrimary, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(text = "Streaming Gemini 3.8 Flash attivo", color = LuxGoldPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(text = generationProgress ?: "Connessione ed elaborazione...", color = LuxTextSecondary, fontSize = 10.sp)
+                                }
+                            }
                         }
                     }
                 }
@@ -674,7 +699,7 @@ fun AiScriptGeneratorModal(
                 if (isGenerating) {
                     CircularProgressIndicator(color = Color(0xFF121006), modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Generazione con Gemini in corso...", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(generationProgress ?: "Generazione con Gemini in corso...", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 } else {
                     Icon(imageVector = Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))

@@ -14,6 +14,7 @@ import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 
 private const val TAG = "GeminiAutomotiveAi"
+private const val GENERATION_TIMEOUT_MS = 120_000L // 120 secondi per consentire il completamento di script completi
 
 class AiNotConfiguredException(message: String) : IllegalStateException(message)
 
@@ -39,12 +40,15 @@ class GeminiAutomotiveAiClient(private val context: Context) {
         )
     }
 
-    suspend fun generateScript(request: AiScriptRequest): Result<GeneratedAutomotiveScript> = withContext(Dispatchers.IO) {
+    suspend fun generateScript(
+        request: AiScriptRequest,
+        onProgress: ((String) -> Unit)? = null
+    ): Result<GeneratedAutomotiveScript> = withContext(Dispatchers.IO) {
         val status = getBackendStatus()
 
         when (status) {
             is AiBackendStatus.FirebaseAiLogicActive -> {
-                generateViaFirebaseAiLogic(request)
+                generateViaFirebaseAiLogic(request, onProgress)
             }
             is AiBackendStatus.NotConfigured -> {
                 Result.failure(AiNotConfiguredException(status.explanation))
@@ -52,7 +56,10 @@ class GeminiAutomotiveAiClient(private val context: Context) {
         }
     }
 
-    private suspend fun generateViaFirebaseAiLogic(request: AiScriptRequest): Result<GeneratedAutomotiveScript> {
+    private suspend fun generateViaFirebaseAiLogic(
+        request: AiScriptRequest,
+        onProgress: ((String) -> Unit)? = null
+    ): Result<GeneratedAutomotiveScript> {
         return try {
             val prompt = AutomotivePromptBuilder.buildPrompt(request)
             val config = generationConfig {
@@ -68,19 +75,59 @@ class GeminiAutomotiveAiClient(private val context: Context) {
                 }
             )
 
-            val response = withTimeout(60_000L) {
-                model.generateContent(prompt)
+            onProgress?.invoke("Connessione a Gemini 3.8 Flash...")
+
+            val rawText = withTimeout(GENERATION_TIMEOUT_MS) {
+                // Try progressive streaming first to reduce perceived latency and maintain an active socket
+                var streamFailed = false
+                val accumulated = StringBuilder()
+                var chunkCount = 0
+
+                try {
+                    val stream = model.generateContentStream(prompt)
+                    stream.collect { chunk ->
+                        val piece = chunk.text.orEmpty()
+                        if (piece.isNotEmpty()) {
+                            accumulated.append(piece)
+                            chunkCount++
+                            onProgress?.invoke("Generazione in corso: $chunkCount blocchi ricevuti...")
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Streaming non riuscito, tentato fallback unario: ${e.message}")
+                    streamFailed = true
+                    if (accumulated.isNotEmpty()) {
+                        // Se sono già stati ricevuti frammenti e la connessione si è interrotta, propaghiamo l'errore
+                        throw e
+                    }
+                }
+
+                if (!streamFailed && accumulated.isNotBlank()) {
+                    accumulated.toString()
+                } else {
+                    onProgress?.invoke("Attesa completamento script da Gemini...")
+                    val unaryResponse = model.generateContent(prompt)
+                    unaryResponse.text.orEmpty()
+                }
             }
 
-            val rawText = response.text
-            if (rawText.isNullOrBlank()) {
+            if (rawText.isBlank()) {
                 throw IllegalStateException("Il modello Gemini ha restituito una risposta vuota.")
             }
+
+            onProgress?.invoke("Validazione e parsing della sceneggiatura...")
             val parsed = parseJsonToScript(rawText)
             Result.success(parsed)
         } catch (e: TimeoutCancellationException) {
-            Log.e(TAG, "Generazione Firebase AI Logic scaduta dopo 60s", e)
-            Result.failure(IllegalStateException("La generazione dello script ha superato il tempo limite di 60 secondi. Riprova."))
+            Log.e(TAG, "Generazione Firebase AI Logic scaduta dopo ${GENERATION_TIMEOUT_MS / 1000}s", e)
+            Result.failure(
+                IllegalStateException(
+                    "La generazione dello script ha superato il tempo limite di ${GENERATION_TIMEOUT_MS / 1000} secondi. " +
+                        "La risposta di Gemini ha impiegato troppo tempo o la connessione di rete è rallentata. Nessun progetto corrotto è stato salvato. Riprova."
+                )
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -119,17 +166,29 @@ class GeminiAutomotiveAiClient(private val context: Context) {
 
     fun parseJsonToScript(rawInput: String): GeneratedAutomotiveScript {
         val cleanJson = cleanMarkdownJson(rawInput)
+        if (cleanJson.isBlank()) {
+            throw IllegalStateException("La risposta del modello è vuota. Nessun progetto salvato.")
+        }
+
         val json = try {
             JSONObject(cleanJson)
         } catch (e: Exception) {
-            throw IllegalStateException("Risposta del modello non conforme al formato JSON richiesto.", e)
+            throw IllegalStateException("Risposta del modello incompleta o non conforme al formato JSON. Nessun progetto corrotto è stato salvato.", e)
+        }
+
+        val title = json.optString("title", "").trim()
+        val fullScript = json.optString("fullScript", "").trim()
+        val hook = json.optString("hook", "").trim()
+
+        if (title.isBlank() && fullScript.isBlank() && hook.isBlank()) {
+            throw IllegalStateException("La risposta JSON non contiene le sezioni essenziali del progetto video (titolo, hook o script). Nessun progetto corrotto è stato salvato.")
         }
 
         return GeneratedAutomotiveScript(
-            title = json.optString("title", "Progetto LuxDrive"),
+            title = if (title.isNotBlank()) title else "Progetto LuxDrive",
             youtubeTitleAlternative = json.optString("youtubeTitleAlternative", ""),
-            hook = json.optString("hook", ""),
-            fullScript = json.optString("fullScript", ""),
+            hook = hook,
+            fullScript = fullScript,
             voiceOverNotes = json.optString("voiceOverNotes", ""),
             researchAndSources = json.optString("researchAndSources", ""),
             storyboardSummary = json.optString("storyboardSummary", ""),
