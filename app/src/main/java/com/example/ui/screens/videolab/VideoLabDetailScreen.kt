@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -45,6 +47,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,6 +69,7 @@ import com.example.data.model.AutomotiveCategory
 import com.example.data.model.ProjectFormat
 import com.example.data.model.ProjectStatus
 import com.example.data.model.VideoProject
+import com.example.data.service.AiScriptRequest
 import com.example.ui.components.LuxConfirmDialog
 import com.example.ui.theme.LuxDarkBackground
 import com.example.ui.theme.LuxGoldAccent
@@ -102,7 +106,7 @@ fun VideoLabDetailScreen(
         viewModel.loadProject(projectId)
     }
 
-    val state = viewModel.state.value
+    val state by viewModel.state.collectAsState()
     val project = state.currentEditingProject
 
     if (project == null) {
@@ -134,10 +138,32 @@ fun VideoLabDetailScreen(
     var tiktokAdaptation by remember(project.id) { mutableStateOf(project.tiktokAdaptation) }
     var durationMinutesText by remember(project.id) { mutableStateOf(project.estimatedDurationMinutes.toString()) }
 
+    LaunchedEffect(project.updatedAtMillis) {
+        title = project.title
+        category = project.category
+        format = project.format
+        status = project.status
+        hook = project.hook
+        researchAndSources = project.researchAndSources
+        fullScript = project.fullScript
+        voiceOverNotes = project.voiceOverNotes
+        capcutNotes = project.capcutEditingNotes
+        youtubeTitleAlt = project.youtubeTitleAlternative
+        description = project.description
+        chaptersText = project.chaptersText
+        tags = project.tags
+        thumbnailConcept = project.thumbnailConcept
+        shortsDerivedScript = project.shortsDerivedScript
+        tiktokAdaptation = project.tiktokAdaptation
+        durationMinutesText = project.estimatedDurationMinutes.toString()
+    }
+
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabTitles = listOf("Script & Voice", "CapCut & Story", "YouTube Info", "Shorts & Social")
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showRegenerateConfirm by remember { mutableStateOf(false) }
+    var showAiModal by remember { mutableStateOf(false) }
 
     fun copyToClipboard(label: String, text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -171,7 +197,24 @@ fun VideoLabDetailScreen(
                         )
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = { showRegenerateConfirm = true },
+                            border = BorderStroke(1.dp, LuxGoldBorder),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LuxGoldPrimary),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.testTag("regenerate_with_ai_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = LuxGoldPrimary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "Rigenera AI", fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                        }
+
                         IconButton(onClick = { showDeleteConfirm = true }) {
                             Icon(imageVector = Icons.Filled.Delete, contentDescription = "Elimina", tint = LuxYoutubeRed)
                         }
@@ -523,4 +566,57 @@ fun VideoLabDetailScreen(
         },
         onDismiss = { showDeleteConfirm = false }
     )
+
+    LuxConfirmDialog(
+        show = showRegenerateConfirm,
+        title = "Rigenera con AI Gemini",
+        message = "Attenzione: rigenerando lo script con l'AI, i testi e le sezioni attuali di questo progetto verranno sovrascritti con la nuova bozza generata.\n\nVuoi procedere alla configurazione della richiesta?",
+        confirmButtonText = "Procedi",
+        isDestructive = false,
+        onConfirm = {
+            showRegenerateConfirm = false
+            showAiModal = true
+        },
+        onDismiss = { showRegenerateConfirm = false }
+    )
+
+    if (showAiModal) {
+        val cat = AutomotiveCategory.entries.find { it.displayName == project.category }
+            ?: AutomotiveCategory.SUPERCAR_MAINTENANCE_REAL_COST
+        val fmt = try { ProjectFormat.valueOf(project.format) } catch (e: Exception) { ProjectFormat.LONG_VIDEO }
+        val initialReq = remember(project.id) {
+            AiScriptRequest(
+                carTopic = project.carModel.ifBlank { project.title },
+                format = fmt,
+                durationMinutes = project.estimatedDurationMinutes.coerceAtLeast(1),
+                contentGoal = project.contentGoal.ifBlank { "Analisi approfondita costi, prestazioni ed esclusività" },
+                category = cat,
+                narrativeTone = project.narrativeTone.ifBlank { "Autorevole & Analitico" },
+                userSourcesOrNotes = project.userNotes.ifBlank { project.researchAndSources }
+            )
+        }
+
+        AiScriptGeneratorModal(
+            backendStatus = state.aiBackendStatus,
+            isGenerating = state.isGeneratingAi,
+            errorMessage = state.aiGenerationError,
+            initialRequest = initialReq,
+            onDismiss = {
+                viewModel.clearAiError()
+                showAiModal = false
+            },
+            onGenerate = { req ->
+                viewModel.generateScriptWithAi(
+                    request = req,
+                    targetExistingProjectId = project.id
+                )
+            }
+        )
+
+        LaunchedEffect(state.isGeneratingAi, state.aiGenerationError, state.feedbackMessage) {
+            if (!state.isGeneratingAi && state.aiGenerationError == null && state.feedbackMessage != null) {
+                showAiModal = false
+            }
+        }
+    }
 }

@@ -3,6 +3,7 @@ package com.example.data.repository
 import com.example.data.local.VideoProjectDao
 import com.example.data.model.AutomotiveCategory
 import com.example.data.model.ProjectFormat
+import com.example.data.model.ProjectOrigin
 import com.example.data.model.ProjectStatus
 import com.example.data.model.VideoProject
 import kotlinx.coroutines.flow.Flow
@@ -32,6 +33,7 @@ class VideoProjectRepository(private val dao: VideoProjectDao) {
             id = 0L,
             title = "${original.title} (Copia)",
             status = ProjectStatus.DRAFT.name,
+            origin = ProjectOrigin.USER_CREATED.name,
             scheduledDateMillis = null,
             publishedDateMillis = null,
             youtubeVideoId = "",
@@ -102,7 +104,8 @@ CONCLUSIONI E VERDETTO FINALE (9:30 - 12:00)
                 ctrPercent = 8.6,
                 likesCount = 2890L,
                 commentsCount = 312L,
-                isDemoAnalytics = true
+                isDemoAnalytics = true,
+                origin = ProjectOrigin.DEMO_SEED.name
             )
 
             val p2 = VideoProject(
@@ -131,7 +134,8 @@ CONCLUSIONI E VERDETTO FINALE (9:30 - 12:00)
                 ctrPercent = 0.0,
                 likesCount = 0L,
                 commentsCount = 0L,
-                isDemoAnalytics = false
+                isDemoAnalytics = false,
+                origin = ProjectOrigin.DEMO_SEED.name
             )
 
             val p3 = VideoProject(
@@ -160,7 +164,8 @@ CONCLUSIONI E VERDETTO FINALE (9:30 - 12:00)
                 ctrPercent = 0.0,
                 likesCount = 0L,
                 commentsCount = 0L,
-                isDemoAnalytics = false
+                isDemoAnalytics = false,
+                origin = ProjectOrigin.DEMO_SEED.name
             )
 
             dao.insertProject(p1)

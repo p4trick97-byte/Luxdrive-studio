@@ -3,6 +3,12 @@ package com.example.data.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+enum class ProjectOrigin(val displayName: String, val badgeLabel: String) {
+    DEMO_SEED("Dimostrativo", "Demo"),
+    USER_CREATED("Manuale", "Bozza Manuale"),
+    AI_GENERATED("Gemini AI", "Generato con AI")
+}
+
 @Entity(tableName = "video_projects")
 data class VideoProject(
     @PrimaryKey(autoGenerate = true)
@@ -38,5 +44,11 @@ data class VideoProject(
     val commentsCount: Long = 0,
     val isDemoAnalytics: Boolean = true,
     val createdAtMillis: Long = System.currentTimeMillis(),
-    val updatedAtMillis: Long = System.currentTimeMillis()
+    val updatedAtMillis: Long = System.currentTimeMillis(),
+    // Origin & Generation metadata for transparency and reproducibility
+    val origin: String = ProjectOrigin.USER_CREATED.name,
+    val carModel: String = "",
+    val contentGoal: String = "",
+    val narrativeTone: String = "",
+    val userNotes: String = ""
 )

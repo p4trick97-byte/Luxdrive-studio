@@ -4,14 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.AutomotiveCategory
 import com.example.data.model.ProjectFormat
+import com.example.data.model.ProjectOrigin
 import com.example.data.model.ProjectStatus
 import com.example.data.model.VideoProject
 import com.example.data.repository.VideoProjectRepository
+import com.example.data.service.AiBackendStatus
+import com.example.data.service.AiScriptRequest
+import com.example.data.service.GeminiAutomotiveAiClient
+import com.example.data.service.GeneratedAutomotiveScript
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class VideoLabUiState(
@@ -22,72 +25,60 @@ data class VideoLabUiState(
     val searchQuery: String = "",
     val feedbackMessage: String? = null,
     val newlyCreatedProjectId: Long? = null,
-    val isSaving: Boolean = false
+    val isSaving: Boolean = false,
+    // AI Generation states
+    val isGeneratingAi: Boolean = false,
+    val aiGenerationError: String? = null,
+    val showAiGeneratorDialog: Boolean = false,
+    val aiBackendStatus: AiBackendStatus = AiBackendStatus.NotConfigured("Inizializzazione in corso..."),
+    val lastAiRequest: AiScriptRequest? = null
 )
 
 class VideoLabViewModel(
-    private val projectRepository: VideoProjectRepository
+    private val projectRepository: VideoProjectRepository,
+    private val aiClient: GeminiAutomotiveAiClient
 ) : ViewModel() {
-
-    private val _projects = MutableStateFlow<List<VideoProject>>(emptyList())
-    private val _currentEditingProject = MutableStateFlow<VideoProject?>(null)
-    private val _selectedStatusFilter = MutableStateFlow<String?>(null)
-    private val _selectedFormatFilter = MutableStateFlow<String?>(null)
-    private val _searchQuery = MutableStateFlow("")
-    private val _feedbackMessage = MutableStateFlow<String?>(null)
-    private val _newlyCreatedProjectId = MutableStateFlow<Long?>(null)
-    private val _isSaving = MutableStateFlow(false)
-
-    val uiState: StateFlow<VideoLabUiState> = projectRepository.allProjects.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    ).let { repoFlow ->
-        MutableStateFlow(VideoLabUiState()).apply {
-            viewModelScope.launch {
-                repoFlow.collect { list ->
-                    _projects.value = list
-                }
-            }
-        }
-    }
 
     private val _state = MutableStateFlow(VideoLabUiState())
     val state: StateFlow<VideoLabUiState> = _state.asStateFlow()
 
+    private var allProjectsCache: List<VideoProject> = emptyList()
+
     init {
+        checkBackendStatus()
         viewModelScope.launch {
             projectRepository.allProjects.collect { list ->
-                updateFilteredList(list, _selectedStatusFilter.value, _selectedFormatFilter.value, _searchQuery.value)
+                allProjectsCache = list
+                updateFilteredList(list, _state.value.selectedStatusFilter, _state.value.selectedFormatFilter, _state.value.searchQuery)
             }
         }
+    }
+
+    fun checkBackendStatus() {
+        val status = aiClient.getBackendStatus()
+        _state.value = _state.value.copy(aiBackendStatus = status)
+    }
+
+    fun setShowAiGeneratorDialog(show: Boolean) {
+        _state.value = _state.value.copy(
+            showAiGeneratorDialog = show,
+            aiGenerationError = if (show) null else _state.value.aiGenerationError
+        )
     }
 
     fun setStatusFilter(status: String?) {
-        _selectedStatusFilter.value = status
-        viewModelScope.launch {
-            projectRepository.allProjects.collect { list ->
-                updateFilteredList(list, status, _selectedFormatFilter.value, _searchQuery.value)
-            }
-        }
+        _state.value = _state.value.copy(selectedStatusFilter = status)
+        updateFilteredList(allProjectsCache, status, _state.value.selectedFormatFilter, _state.value.searchQuery)
     }
 
     fun setFormatFilter(format: String?) {
-        _selectedFormatFilter.value = format
-        viewModelScope.launch {
-            projectRepository.allProjects.collect { list ->
-                updateFilteredList(list, _selectedStatusFilter.value, format, _searchQuery.value)
-            }
-        }
+        _state.value = _state.value.copy(selectedFormatFilter = format)
+        updateFilteredList(allProjectsCache, _state.value.selectedStatusFilter, format, _state.value.searchQuery)
     }
 
     fun setSearchQuery(query: String) {
-        _searchQuery.value = query
-        viewModelScope.launch {
-            projectRepository.allProjects.collect { list ->
-                updateFilteredList(list, _selectedStatusFilter.value, _selectedFormatFilter.value, query)
-            }
-        }
+        _state.value = _state.value.copy(searchQuery = query)
+        updateFilteredList(allProjectsCache, _state.value.selectedStatusFilter, _state.value.selectedFormatFilter, query)
     }
 
     private fun updateFilteredList(
@@ -107,7 +98,8 @@ class VideoLabViewModel(
             filtered = filtered.filter {
                 it.title.contains(query, ignoreCase = true) ||
                 it.category.contains(query, ignoreCase = true) ||
-                it.tags.contains(query, ignoreCase = true)
+                it.tags.contains(query, ignoreCase = true) ||
+                it.carModel.contains(query, ignoreCase = true)
             }
         }
         _state.value = _state.value.copy(
@@ -125,44 +117,121 @@ class VideoLabViewModel(
         }
     }
 
-    fun createNewProject(format: ProjectFormat = ProjectFormat.LONG_VIDEO) {
+    fun generateScriptWithAi(
+        request: AiScriptRequest,
+        targetExistingProjectId: Long? = null
+    ) {
+        if (_state.value.isGeneratingAi) return // Prevent duplicate clicks
+
         viewModelScope.launch {
-            val defaultCapCut = """
-FASE 1: IMPORT & PROPORZIONI
-1. Apri CapCut su smartphone > Nuovo Progetto.
-2. Imposta Formato: ${if (format == ProjectFormat.SHORTS) "9:16 (Verticale)" else "16:9 (Orizzontale)"}.
-3. Risoluzione: 1080p a 60fps (o 4K a 30fps).
+            _state.value = _state.value.copy(
+                isGeneratingAi = true,
+                aiGenerationError = null,
+                lastAiRequest = request
+            )
 
-FASE 2: MONTAGGIO RITMATO
-- Taglia ogni pausa superiore a 0.3 secondi nella voce narrante.
-- Inserisci b-roll dell'auto ogni 3-4 secondi max per non perdere l'attenzione.
-- Zoom lento continuo ("Keyframe scale 100% -> 110%") sulle inquadrature statiche di motore e fari.
+            val result = aiClient.generateScript(request)
+            result.fold(
+                onSuccess = { generatedScript ->
+                    val projectToSave = if (targetExistingProjectId != null && targetExistingProjectId > 0) {
+                        val existing = projectRepository.getProjectById(targetExistingProjectId)
+                        existing?.copy(
+                            title = generatedScript.title,
+                            category = request.category.displayName,
+                            format = request.format.name,
+                            hook = generatedScript.hook,
+                            fullScript = generatedScript.fullScript,
+                            voiceOverNotes = generatedScript.voiceOverNotes,
+                            researchAndSources = generatedScript.researchAndSources,
+                            storyboardJson = generatedScript.storyboardSummary,
+                            capcutEditingNotes = generatedScript.capcutEditingNotes,
+                            estimatedDurationMinutes = request.durationMinutes,
+                            youtubeTitleAlternative = generatedScript.youtubeTitleAlternative,
+                            description = generatedScript.description,
+                            chaptersText = generatedScript.chaptersText,
+                            tags = generatedScript.tags,
+                            thumbnailConcept = generatedScript.thumbnailConcept,
+                            shortsDerivedScript = generatedScript.shortsDerivedScript,
+                            tiktokAdaptation = generatedScript.tiktokAdaptation,
+                            instagramReelAdaptation = generatedScript.instagramReelAdaptation,
+                            origin = ProjectOrigin.AI_GENERATED.name,
+                            carModel = request.carTopic,
+                            contentGoal = request.contentGoal,
+                            narrativeTone = request.narrativeTone,
+                            userNotes = request.userSourcesOrNotes,
+                            updatedAtMillis = System.currentTimeMillis()
+                        ) ?: buildNewProjectFromAi(request, generatedScript)
+                    } else {
+                        buildNewProjectFromAi(request, generatedScript)
+                    }
 
-FASE 3: TESTO & GRAFICA
-- Aggiungi testo 'Montserrat / The Bold Font' colore Giallo Oro (#FFDF00) per le cifre in euro e cavalli.
-- Effetto sonoro 'Swoosh' o 'Thud' sulle apparizioni delle tabelle costi.
+                    val savedId = projectRepository.saveProject(projectToSave)
+                    _state.value = _state.value.copy(
+                        isGeneratingAi = false,
+                        showAiGeneratorDialog = false,
+                        newlyCreatedProjectId = savedId,
+                        currentEditingProject = projectToSave.copy(id = savedId),
+                        feedbackMessage = "Script generato con successo dall'AI per: ${request.carTopic}"
+                    )
+                },
+                onFailure = { error ->
+                    _state.value = _state.value.copy(
+                        isGeneratingAi = false,
+                        aiGenerationError = error.localizedMessage ?: "Errore imprevisto durante la generazione."
+                    )
+                }
+            )
+        }
+    }
 
-FASE 4: AUDIO & COLOR GRADING
-- Regola volume musica di sottofondo a -22 dB rispetto alla traccia voce (0 dB).
-- Filtro colore consigliato: 'Nero & Oro / Cinematic' (+10 contrasto, -5 saturazione su sfondi, +15 nitidezza).
-            """.trimIndent()
+    private fun buildNewProjectFromAi(request: AiScriptRequest, generated: GeneratedAutomotiveScript): VideoProject {
+        return VideoProject(
+            title = generated.title,
+            category = request.category.displayName,
+            format = request.format.name,
+            status = ProjectStatus.DRAFT.name,
+            hook = generated.hook,
+            fullScript = generated.fullScript,
+            voiceOverNotes = generated.voiceOverNotes,
+            researchAndSources = generated.researchAndSources,
+            storyboardJson = generated.storyboardSummary,
+            capcutEditingNotes = generated.capcutEditingNotes,
+            estimatedDurationMinutes = request.durationMinutes,
+            youtubeTitleAlternative = generated.youtubeTitleAlternative,
+            description = generated.description,
+            chaptersText = generated.chaptersText,
+            tags = generated.tags,
+            thumbnailConcept = generated.thumbnailConcept,
+            shortsDerivedScript = generated.shortsDerivedScript,
+            tiktokAdaptation = generated.tiktokAdaptation,
+            instagramReelAdaptation = generated.instagramReelAdaptation,
+            origin = ProjectOrigin.AI_GENERATED.name,
+            carModel = request.carTopic,
+            contentGoal = request.contentGoal,
+            narrativeTone = request.narrativeTone,
+            userNotes = request.userSourcesOrNotes
+        )
+    }
 
+    fun createNewManualProject(format: ProjectFormat = ProjectFormat.LONG_VIDEO) {
+        viewModelScope.launch {
             val p = VideoProject(
-                title = "Nuovo Progetto Video Automotive",
+                title = "Nuovo Progetto Manuale",
                 category = AutomotiveCategory.SUPERCAR_MAINTENANCE_REAL_COST.displayName,
                 format = format.name,
                 status = ProjectStatus.DRAFT.name,
-                hook = "Ecco cosa succede quando decidi di comprare una...",
-                capcutEditingNotes = defaultCapCut,
-                fullScript = "INTRO:\n[Scrivi qui l'apertura del video]\n\nPARTE 1: ANALISI TECNICA:\n...\n\nCONCLUSIONI:\n...",
-                chaptersText = "0:00 Introduzione\n1:30 Primo blocco\n5:00 Dati e cifre\n9:00 Verdetto",
-                tags = "luxdrive, automotive, motori, auto sportive",
-                thumbnailConcept = "Inquadratura 3/4 frontale dell'auto con testo gigante in oro lucido."
+                origin = ProjectOrigin.USER_CREATED.name,
+                hook = "",
+                fullScript = "",
+                capcutEditingNotes = "Linee guida montaggio smartphone CapCut...",
+                chaptersText = "",
+                tags = "luxdrive, automotive",
+                thumbnailConcept = ""
             )
             val newId = projectRepository.saveProject(p)
             _state.value = _state.value.copy(
                 newlyCreatedProjectId = newId,
-                feedbackMessage = "Nuovo progetto creato!"
+                feedbackMessage = "Nuova bozza creata!"
             )
         }
     }
@@ -206,5 +275,9 @@ FASE 4: AUDIO & COLOR GRADING
             feedbackMessage = null,
             newlyCreatedProjectId = null
         )
+    }
+
+    fun clearAiError() {
+        _state.value = _state.value.copy(aiGenerationError = null)
     }
 }

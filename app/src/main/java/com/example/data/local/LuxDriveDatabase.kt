@@ -9,7 +9,7 @@ import com.example.data.model.VideoProject
 
 @Database(
     entities = [VideoProject::class, ChannelMetric::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class LuxDriveDatabase : RoomDatabase() {
@@ -26,7 +26,9 @@ abstract class LuxDriveDatabase : RoomDatabase() {
                     context.applicationContext,
                     LuxDriveDatabase::class.java,
                     "luxdrive_studio.db"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

@@ -31,6 +31,7 @@ import com.example.data.repository.AiStrategyRepository
 import com.example.data.repository.AnalyticsRepository
 import com.example.data.repository.IntegrationBridgeManager
 import com.example.data.repository.VideoProjectRepository
+import com.example.data.service.GeminiAutomotiveAiClient
 import com.example.ui.components.LuxBottomBar
 import com.example.ui.components.LuxTopBar
 import com.example.ui.navigation.Screen
@@ -54,6 +55,7 @@ import com.example.ui.screens.videolab.VideoLabScreen
 import com.example.ui.screens.videolab.VideoLabViewModel
 import com.example.ui.theme.LuxDarkBackground
 import com.example.ui.theme.LuxDriveTheme
+import com.example.util.AppCheckHelper
 
 class MainActivity : ComponentActivity() {
 
@@ -61,11 +63,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        AppCheckHelper.configureAppCheck(this, intent)
+
         val database = LuxDriveDatabase.getDatabase(applicationContext)
         val projectRepository = VideoProjectRepository(database.videoProjectDao())
         val analyticsRepository = AnalyticsRepository(database.channelMetricDao())
         val strategyRepository = AiStrategyRepository()
         val integrationBridge = IntegrationBridgeManager()
+        val aiClient = GeminiAutomotiveAiClient(applicationContext)
 
         setContent {
             LuxDriveTheme {
@@ -73,7 +78,8 @@ class MainActivity : ComponentActivity() {
                     projectRepository = projectRepository,
                     analyticsRepository = analyticsRepository,
                     strategyRepository = strategyRepository,
-                    integrationBridge = integrationBridge
+                    integrationBridge = integrationBridge,
+                    aiClient = aiClient
                 )
             }
         }
@@ -85,7 +91,8 @@ fun LuxDriveApp(
     projectRepository: VideoProjectRepository,
     analyticsRepository: AnalyticsRepository,
     strategyRepository: AiStrategyRepository,
-    integrationBridge: IntegrationBridgeManager
+    integrationBridge: IntegrationBridgeManager,
+    aiClient: GeminiAutomotiveAiClient
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -123,7 +130,7 @@ fun LuxDriveApp(
         factory = object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
-                return VideoLabViewModel(projectRepository) as T
+                return VideoLabViewModel(projectRepository, aiClient) as T
             }
         }
     )
